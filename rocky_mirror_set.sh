@@ -8,12 +8,14 @@
 
 #Implementations
 # 1. Select your upstream server or use default
-set -euo pipefail
+#set -euo pipefail
+# Questionable logic, if the grepo does not find anything it will return 1. -e will break/exit script
 
 download_repo() {
     printf "Downloading full repo."
     dnf repolist -v --repo="${repo_id}" | grep Repo-available-pkgs
     #dnf reposync -v --repo="${repo_id}" --download-metadata --download-path="${LOCATION}
+    # Il reacticvate this once i am done this is just a test
     if [[ "$?" -eq 0 ]]; then
         printf "All files downloaded. Repo sync finished succsefully!"
         return 0
@@ -34,38 +36,45 @@ read -p "Enter:" mirror_decission
 
 if [[ "$mirror_decission" -eq 1 ]]; then
     read -p "Enter the repo ID you want to mirror: " repo_id
-    validatingRepoID=$(dnf repolist -v | grep Repo-id | grep $repo_id)
+    validatingRepoID=$(dnf repolist -v | awk -F': ' '/Repo-id/ {print $2}' | grep -x "${repo_id}")
     while [[ -z "$validatingRepoID" ]]; do
-        printf "Provided RepoID is not available.\n"
+        printf "Provided RepoID %s is not available.\n" "${repo_id}"
         read -p "Enter the repo ID you want to mirror: " repo_id
-        validatingRepoID=$(dnf repolist -v | grep Repo-id | grep "{$repo_id}")
+        printf "Looking up for %s" "$repo_id"
+        validatingRepoID=$(dnf repolist -v | awk -F': ' '/Repo-id/ {print $2}' | grep -x "${repo_id}")
     done
+    printf "%s founded as in the available repos.\n" "${repo_id}"
 else
-    echo "Feature not yet implemented"
+    printf "Feature not yet implemented\n"
+fi
+
+if [[ "$mirror_decission" -eq 2 ]]; then
+    printf "This is for cusom entry\n"
 fi
 
 read -p "Enter the location you want to save downloaded files:" LOCATION
 
 if [[ ! -d "$LOCATION" ]]; then
-    printf "Location %s does not exists, creating it now..." "$LOCATION"
-    mkdir -p $LOCATION
+    printf "Location %s does not exists, creating it now...\n" "$LOCATION"
+    mkdir -p "$LOCATION"
 else
-    printf "Function to be added in case directory not empty, contains some files, some additinoal checks"
+    printf "Function to be added in case directory not empty, contains some files, some additinoal checks\n"
 fi
 
 REPOSIZE=$(dnf repolist -v --repo="${repo_id}" | grep Repo-size | awk '{print $3,$4}')
 read -r -p "Do you want to download the full repository? Size: ${REPOSIZE}. [y/n]: " answer
 
 if [[ "$answer" == "y" ]]; then    
-    download_success=download_repo
-    while [[ "$download_success" -ne 0 ]]; do
+    download_repo
+    while ! download_repo; do
         read -r -p "Download failed. Repeat [y/n]: " answer
-            if [[ "$answer" == "y "]]; then
-                download_repo
-            else
+            if [[ "$answer" != "y" ]]; then
+                printf "Stopping download... If you want to retry rerun the script!\n"
                 break
+            printf "Retrying gownload...\n"
             fi
+        done
 else
-    printf "Need to verify if packages locally present."
+    printf "Need to verify if packages locally present.\n"
 fi
 # checking if reposync succeded
