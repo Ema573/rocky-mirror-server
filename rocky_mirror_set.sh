@@ -14,7 +14,7 @@
 download_repo() {
     printf "Downloading full repo."
     printf "Repo %s" "${repo_id}"
-    printf "Repo size" dnf repolist -v --repo=baseos | awk -F': ' '/Repo-size/ {print $2}'
+    printf 'Repo size: %s\n' "$(dnf repolist -v --repo=baseos | awk -F': ' '/Repo-size/ {print $2}')"
     dnf repolist -v --repo="${repo_id}" | grep Repo-available-pkgs
     #dnf reposync -v --repo="${repo_id}" --download-metadata --download-path="${LOCATION}
     # Il reacticvate this once i am done this is just a test
