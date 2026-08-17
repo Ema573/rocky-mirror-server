@@ -11,12 +11,14 @@
 #set -euo pipefail
 # Questionable logic, if the grepo does not find anything it will return 1. -e will break/exit script
 
+SCRIPT_LOCATION=$(realpath "$0" | sed 's|\(.*\)/.*|\1|')
+
 download_repo() {
     printf "Downloading full repo."
     printf "Repo %s" "${repo_id}"
     printf 'Repo size: %s\n' "$(dnf repolist -v --repo=baseos | awk -F': ' '/Repo-size/ {print $2}')"
     dnf repolist -v --repo="${repo_id}" | grep Repo-available-pkgs
-    #dnf reposync -v --repo="${repo_id}" --download-metadata --download-path="${LOCATION}
+    dnf reposync -v --repo="${repo_id}" --download-metadata --download-path="${LOCATION}"
     # Il reacticvate this once i am done this is just a test
     if [[ "$?" -eq 0 ]]; then
         printf "All files downloaded. Repo sync finished succsefully!\n"
@@ -24,6 +26,10 @@ download_repo() {
     else
         return 1
     fi
+}
+
+save_config() {
+    printf "%s=%s\n" "$1" "$2" >> mirror.conf
 }
 
 printf "Current configured repos:\n"
@@ -47,6 +53,7 @@ done
 if [[ "$mirror_decission" -eq 1 ]]; then
     read -p "Enter the repo ID you want to mirror: " repo_id
     validatingRepoID=$(dnf repolist -v | awk -F': ' '/Repo-id/ {print $2}' | grep -x "${repo_id}")
+    save_config "repo_id" "${repo_id}"
     while [[ -z "$validatingRepoID" ]]; do
         printf "Provided RepoID %s is not available.\n" "${repo_id}"
         read -p "Enter the repo ID you want to mirror: " repo_id
@@ -59,14 +66,25 @@ elif [[ "${mirror_decission}" -eq 2 ]]; then
 fi
 
 
-read -p "Enter the location you want to save downloaded files:" LOCATION
+while true; do
+    read -p "Enter the location you want to save downloaded files. Default [/srv/mirror]:" LOCATION
 
-if [[ ! -d "$LOCATION" ]]; then
-    printf "Location %s does not exists, creating it now...\n" "$LOCATION"
-    mkdir -p "$LOCATION"
-else
-    printf "Function to be added in case directory not empty, contains some files, some additinoal checks\n"
-fi
+    if [[ "${LOCATION}" = "" ]]; then
+        LOCATION="/srv/mirror"
+        LOCATION=$(realpath "$LOCATION")
+        break
+    elif [[ ! -d "$LOCATION" ]]; then
+        printf "Location %s does not exists, creating it now...\n" "$LOCATION"
+        mkdir -p "$LOCATION"
+        LOCATION=$(realpath "$LOCATION")
+        break
+    else
+        printf "Folder already exists. Listing content.\n"
+        ls "${LOCATION}"
+        printf "Enter again.\n"
+        continue
+    fi
+done
 
 REPOSIZE=$(dnf repolist -v --repo="${repo_id}" | grep Repo-size | awk '{print $3,$4}')
 read -r -p "Do you want to download the full repository? Size: ${REPOSIZE}. [y/n]: " answer
@@ -80,7 +98,22 @@ if [[ "$answer" == "y" ]]; then
             printf "Retrying gownload...\n"
             fi
         done
+    printf "Download succsefull. Repo path %s" ""
 else
-    printf "Need to verify if packages locally present.\n"
+    printf "Stopped repo initialization. Saving files to config.\n"
+    exit 1
 fi
-# checking if reposync succeded
+
+printf "Listing the local current repo directory... %s" "${LOCATION}"
+
+ls "${LOCATION}"
+
+#if [[ -n "$(find ${LOCATION} -iname repomd.xml -print -quit)" ]]; then
+#    printf "Repo %s is valid\n" "${repo_id}"
+#fi
+
+if [[ -f "${LOCATION}/${repo_id}/repodata/repomd.xml" ]]; then
+    printf "Repo %s is valid.\n" "${repo_id}"
+else
+    printf "Missing: %s\n" "${LOCATION}/${repo_id}/repodata/repomd.xml"
+fi
